@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>科学小侦探找找看</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+        
+        body {
+            font-family: 'ZCOOL KuaiLe', cursive, sans-serif;
+            background-color: #f0fdf4; /* light green background */
+            background-image: radial-gradient(#86efac 2px, transparent 2px);
+            background-size: 30px 30px;
+            touch-action: manipulation;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        /* The playground area */
+        #playground {
+            position: relative;
+            width: 100%;
+            height: 60vh;
+            background: white;
+            border-radius: 2rem;
+            border: 6px solid #4ade80;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.05);
+            overflow: hidden;
+            /* Custom magnifying glass cursor */
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="%23ec4899" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>') 16 16, auto;
+        }
+
+        .hidden-object {
+            position: absolute;
+            font-size: 3rem;
+            transition: transform 0.2s;
+        }
+        .hidden-object:hover {
+            transform: scale(1.2) rotate(10deg);
+        }
+
+        .found-anim {
+            animation: flyToBag 0.8s ease-in forwards;
+            pointer-events: none;
+        }
+
+        @keyframes flyToBag {
+            0% { transform: scale(1.5); opacity: 1; z-index: 50;}
+            100% { transform: translate(0px, 500px) scale(0); opacity: 0; } /* Approximate fly down */
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col p-4 max-w-lg mx-auto">
+
+    <!-- Mission Dashboard -->
+    <div class="bg-gradient-to-r from-green-400 to-emerald-500 p-6 rounded-3xl shadow-xl text-white text-center mb-4 mt-2">
+        <h1 class="text-3xl font-bold mb-2">🔍 科学小侦探</h1>
+        <div class="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
+            <p id="mission-text" class="text-xl">任务：找出 <span class="font-bold text-yellow-300 text-2xl">3</span> 个 <span class="font-bold text-yellow-300 text-2xl">有生命</span> 的东西！</p>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="flex justify-between items-center mb-4 px-2">
+        <div class="text-gray-600 font-bold text-lg">
+            已找到: <span id="found-count" class="text-pink-500 text-2xl">0</span> / <span id="total-target">3</span>
+        </div>
+    </div>
+
+    <!-- Playground (Search Area) -->
+    <div id="playground">
+        <!-- Objects injected via JS -->
+    </div>
+
+    <!-- Success Modal -->
+    <div id="success-modal" class="hidden absolute inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl text-center transform transition-all w-full max-w-sm">
+            <div class="text-7xl mb-4">🏆</div>
+            <h2 class="text-4xl font-bold text-green-500 mb-4">任务完成！</h2>
+            <p class="text-xl text-gray-600 mb-6">你真是一个厉害的观察家！</p>
+            <button onclick="initGame()" class="w-full bg-green-500 text-white text-2xl py-3 rounded-full shadow-md hover:bg-green-600">再玩一次</button>
+        </div>
+    </div>
+
+    <script>
+        const gameData = [
+            {
+                missionName: "有生命 (生物)",
+                targetType: "living",
+                targetCount: 4,
+                objects: [
+                    { emoji: "🌳", type: "living" }, { emoji: "🐈", type: "living" }, 
+                    { emoji: "🦋", type: "living" }, { emoji: "👦🏻", type: "living" },
+                    { emoji: "🎸", type: "nonliving" }, { emoji: "⚽", type: "nonliving" },
+                    { emoji: "🚗", type: "nonliving" }, { emoji: "📺", type: "nonliving" },
+                    { emoji: "🪑", type: "nonliving" }, { emoji: "📱", type: "nonliving" }
+                ]
+            },
+            {
+                missionName: "能吸水",
+                targetType: "absorb",
+                targetCount: 3,
+                objects: [
+                    { emoji: "🧽", type: "absorb" }, { emoji: "🧻", type: "absorb" }, 
+                    { emoji: "👕", type: "absorb" }, 
+                    { emoji: "🗝️", type: "nonabsorb" }, { emoji: "☂️", type: "nonabsorb" },
+                    { emoji: "🪨", type: "nonabsorb" }, { emoji: "🍎", type: "nonabsorb" },
+                    { emoji: "✂️", type: "nonabsorb" }, { emoji: "🎈", type: "nonabsorb" }
+                ]
+            }
+        ];
+
+        let currentMission = null;
+        let found = 0;
+
+        const elPlayground = document.getElementById('playground');
+        const elFoundCount = document.getElementById('found-count');
+        const elTotalTarget = document.getElementById('total-target');
+        const elMissionText = document.getElementById('mission-text');
+        const elModal = document.getElementById('success-modal');
+
+        function initGame() {
+            elModal.classList.add('hidden');
+            elPlayground.innerHTML = '';
+            found = 0;
+            
+            // Pick a random mission
+            currentMission = gameData[Math.floor(Math.random() * gameData.length)];
+            
+            elFoundCount.innerText = found;
+            elTotalTarget.innerText = currentMission.targetCount;
+            elMissionText.innerHTML = `任务：找出 <span class="font-bold text-yellow-300 text-2xl">${currentMission.targetCount}</span> 个 <span class="font-bold text-yellow-300 text-2xl">${currentMission.missionName}</span> 的东西！`;
+
+            scatterObjects();
+        }
+
+        function scatterObjects() {
+            // Shuffle objects
+            const shuffled = [...currentMission.objects].sort(() => Math.random() - 0.5);
+
+            shuffled.forEach(obj => {
+                const el = document.createElement('div');
+                el.innerText = obj.emoji;
+                el.className = 'hidden-object';
+                
+                // Random position within bounds (leaving padding for the size of emoji)
+                const x = 5 + Math.random() * 80; // percentage
+                const y = 5 + Math.random() * 80; // percentage
+                
+                el.style.left = `${x}%`;
+                el.style.top = `${y}%`;
+                
+                // Rotation for natural messy look
+                el.style.transform = `rotate(${Math.random() * 360}deg)`;
+
+                el.onclick = (e) => handleObjectClick(e, el, obj.type);
+                
+                elPlayground.appendChild(el);
+            });
+        }
+
+        function handleObjectClick(e, element, type) {
+            if (element.classList.contains('found-anim')) return; // Already clicked
+
+            if (type === currentMission.targetType) {
+                // Correct!
+                found++;
+                elFoundCount.innerText = found;
+                
+                // Trigger animation
+                element.style.transform = 'scale(1.5)';
+                element.classList.add('found-anim');
+                
+                // Remove from DOM after animation
+                setTimeout(() => element.remove(), 800);
+
+                if (found >= currentMission.targetCount) {
+                    setTimeout(() => {
+                        elModal.classList.remove('hidden');
+                    }, 1000);
+                }
+            } else {
+                // Wrong item clicked - visual feedback (shake red)
+                element.style.color = 'red';
+                element.style.textShadow = '0 0 10px red';
+                setTimeout(() => {
+                    element.style.color = '';
+                    element.style.textShadow = '';
+                }, 500);
+            }
+        }
+
+        // Start
+        initGame();
+    </script>
+</body>
+</html>
